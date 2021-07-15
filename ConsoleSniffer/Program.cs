@@ -17,15 +17,7 @@ namespace ConsoleSniffer
         /// </summary>
         private static readonly ILog log = log4net.LogManager.GetLogger("Program.cs");
 
-        /// <summary>
-        /// Starting job number
-        /// </summary>
-        private static string StartingJobNumber { get; set; }
-        
-        /// <summary>
-        /// Ending job number
-        /// </summary>
-        private static string EndingJobNumber { get; set; }
+        private static int RawPoints { get; set; }
 
         /// <summary>
         /// City filter
@@ -47,7 +39,7 @@ namespace ConsoleSniffer
         /// </summary>
         private static readonly List<string> KeywordBlacklist = new List<string> { ",IRC","SET" };
 
-        private static List<string> FoundPoints = new List<string> { };
+        private static List<Point> FoundPoints = new List<Point> { };
         #endregion
 
         static void Main(string[] args)
@@ -57,7 +49,7 @@ namespace ConsoleSniffer
 
             EstablishJobParams();
 
-            OutputFilePath = $"point output {DateTime.Now:yyyy-MM-dd-HH-mm-ss} {String.Join("-", Cities.ToArray())}.csv";
+            OutputFilePath = $"{String.Join(" - ", Cities.ToArray())}_point output_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.csv";
 
             string recordPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\Records";
             foreach (string file in Directory.GetFiles(recordPath, "*.csv", SearchOption.TopDirectoryOnly))
@@ -65,7 +57,7 @@ namespace ConsoleSniffer
                 GatherAndProcessProjects(file);
             }
 
-            File.WriteAllLines(OutputFilePath, FoundPoints);
+            //File.WriteAllLines(OutputFilePath, FoundPoints);
             Console.WriteLine("Processing completed.\n" +
                 $"This program found {FoundPoints.Count} related points");
 
@@ -73,6 +65,63 @@ namespace ConsoleSniffer
             Console.Write("Program finished, press any key to exit");
             Console.ReadKey();
         }
+
+
+        #region Establish Job Parameters
+        private static void EstablishJobParams()
+        {
+            log.Debug("Establishing job start and end");
+            /*Regex regex = new Regex(@"^\d{2}-\d{2}-\d{3}$");
+            log.Debug("Grabbing starting job");
+            while (string.IsNullOrEmpty(StartingJobNumber))
+            {
+                string startEntered = GetUserStringInput("Please enter the starting job number");
+                if (regex.IsMatch(startEntered))
+                {
+                    StartingJobNumber = startEntered;
+                }
+                else
+                {
+                    log.Error("Starting job number is not valid.");
+                }
+            }
+            log.Debug("Grabbing ending job");
+            regex = new Regex(@"^(?:\d{2}-\d{2}-\d{3})$|^(?:\*)$");
+            while (string.IsNullOrEmpty(EndingJobNumber))
+            {
+                string endjob = GetUserStringInput("Please enter the starting job number or * for last found job number");
+                if (regex.IsMatch(endjob))
+                {
+                    EndingJobNumber = endjob;
+                }
+                else
+                {
+                    log.Error("Ending job number is not valid.");
+                }
+            }*/
+            log.Debug("Grabbing cities");
+            {
+                bool citiesAdded = false;
+                string cities = "";
+                (int _, int top) = Console.GetCursorPosition();
+                while (!citiesAdded) 
+                {
+                    ClearConsoleAtPoint(top);
+                    Console.WriteLine($"Cites: {cities}");
+                    string city = GetUserStringInput("Please enter a city to collect");
+                    if (string.IsNullOrEmpty(city))
+                    {
+                        citiesAdded = true;
+                    }
+                    else
+                    {
+                        cities += city.ToUpper() + ", ";
+                        Cities.Add(city.ToUpper());
+                    }
+                }
+            }
+        }
+        #endregion
 
         #region Project Processing
         private static void GatherAndProcessProjects(string path)
@@ -139,16 +188,16 @@ namespace ConsoleSniffer
                 bool containsBlacklist = KeywordBlacklist.Any(s => line.Contains(s));
                 if (containsWhitelist && !containsBlacklist)
                 {
-                    string lineWFormat = line + "," + project.JobNumber;
-                    bool alreadyFound = FoundPoints.Any(p => lineWFormat.Equals(p));
+                    Point point = new(line, project.JobNumber, File.GetCreationTime(path));
+                    bool alreadyFound = FoundPoints.Any(p => point.Equals(p));
                     if (alreadyFound)
                     {
-                        log.Debug($"Duplicate point: {line}");
+                        log.Debug($"Duplicate point: {point}");
                     }
                     else
                     {
-                        log.Info($"Found point: {line}");
-                        FoundPoints.Add(lineWFormat);
+                        log.Info($"Found point: {point}");
+                        FoundPoints.Add(point);
                     }
                 }
                 else
@@ -159,61 +208,10 @@ namespace ConsoleSniffer
         }
         #endregion
 
-        #region Establish Job Parameters
-        private static void EstablishJobParams()
+        private static void ProcessPointList()
         {
-            log.Debug("Establishing job start and end");
-            /*Regex regex = new Regex(@"^\d{2}-\d{2}-\d{3}$");
-            log.Debug("Grabbing starting job");
-            while (string.IsNullOrEmpty(StartingJobNumber))
-            {
-                string startEntered = GetUserStringInput("Please enter the starting job number");
-                if (regex.IsMatch(startEntered))
-                {
-                    StartingJobNumber = startEntered;
-                }
-                else
-                {
-                    log.Error("Starting job number is not valid.");
-                }
-            }
-            log.Debug("Grabbing ending job");
-            regex = new Regex(@"^(?:\d{2}-\d{2}-\d{3})$|^(?:\*)$");
-            while (string.IsNullOrEmpty(EndingJobNumber))
-            {
-                string endjob = GetUserStringInput("Please enter the starting job number or * for last found job number");
-                if (regex.IsMatch(endjob))
-                {
-                    EndingJobNumber = endjob;
-                }
-                else
-                {
-                    log.Error("Ending job number is not valid.");
-                }
-            }*/
-            log.Debug("Grabbing cities");
-            {
-                bool citiesAdded = false;
-                string cities = "";
-                (int _, int top) = Console.GetCursorPosition();
-                while (!citiesAdded) 
-                {
-                    ClearConsoleAtPoint(top);
-                    Console.WriteLine($"Cites: {cities}");
-                    string city = GetUserStringInput("Please enter a city to collect");
-                    if (string.IsNullOrEmpty(city))
-                    {
-                        citiesAdded = true;
-                    }
-                    else
-                    {
-                        cities += city.ToUpper() + ", ";
-                        Cities.Add(city.ToUpper());
-                    }
-                }
-            }
+
         }
-        #endregion
 
         #region User Input
         /// <summary>
