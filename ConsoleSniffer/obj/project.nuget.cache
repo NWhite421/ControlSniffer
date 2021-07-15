@@ -1,8 +1,16 @@
 {
   "version": 2,
-  "dgSpecHash": "VEtOSdRJplxxS26XT0KAmRFL7PceobVRrDWsVQ3Gh/6JCCFh9W1KSowyc2c90GMmd/8eCaKw3snn+9JeyIktwA==",
+  "dgSpecHash": "xXLAQpmT0GkZ9IT1LsdpvuQCTVbaBXt5vKZ+itPOG1Y4WV/TV5yA0EaLsvhmaZiRpKP+DrkR6sbW7MUe9FyNCA==",
   "success": true,
-  "projectFilePath": "C:\\Projects\\Console Sniffer\\ConsoleSniffer\\ConsoleSniffer.csproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "D:\\App Development\\ControlSniffer\\ConsoleSniffer\\ConsoleSniffer.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\User\\.nuget\\packages\\log4net\\2.0.12\\log4net.2.0.12.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\microsoft.netcore.platforms\\2.0.0\\microsoft.netcore.platforms.2.0.0.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\system.configuration.configurationmanager\\4.5.0\\system.configuration.configurationmanager.4.5.0.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\system.security.accesscontrol\\4.5.0\\system.security.accesscontrol.4.5.0.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\system.security.cryptography.protecteddata\\4.5.0\\system.security.cryptography.protecteddata.4.5.0.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\system.security.permissions\\4.5.0\\system.security.permissions.4.5.0.nupkg.sha512",
+    "C:\\Users\\User\\.nuget\\packages\\system.security.principal.windows\\4.5.0\\system.security.principal.windows.4.5.0.nupkg.sha512"
+  ],
   "logs": []
 }
