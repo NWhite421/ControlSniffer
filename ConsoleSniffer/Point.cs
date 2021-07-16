@@ -7,32 +7,90 @@ using System.Threading.Tasks;
 
 namespace ConsoleSniffer
 {
-    public record Point
+    public class Point
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+
+        public Point(string coordinates)
+        {
+            string[] parts = coordinates.Split(',');
+            X = double.Parse(parts[0]);
+            Y = double.Parse(parts[1]);
+        }
+    }
+    public record SurveyPoint
     {
         private static readonly ILog log = log4net.LogManager.GetLogger("Point.cs");
 
         #region Public Variables
+
+        /// <summary>
+        /// The unique ID of the survey point.
+        /// </summary>
         public string ID { get; set; }
+        /// <summary>
+        /// The northing of the point
+        /// </summary>
         public double Northing { get; set; }
+        /// <summary>
+        /// The easting of the point
+        /// </summary>
         public double Easting { get; set; }
+        /// <summary>
+        /// the elevation (zenith) of the point
+        /// </summary>
         public double Elevation { get; set; }
+        /// <summary>
+        /// The description of the point.
+        /// </summary>
         public string Description { get; set; }
+        /// <summary>
+        /// The aquire date.
+        /// </summary>
         public DateTime DateAquired { get; set; }
+        /// <summary>
+        /// The source job number in XX-XX-XXX format.
+        /// </summary>
         public string SourceJob { get; set; }
+        /// <summary>
+        /// The source point number
+        /// </summary>
         public string SourcePointID { get; set; }
+        /// <summary>
+        /// The 2D Corrdinates in X, Y.
+        /// </summary>
+        public (double x, double y) Coordinates2D
+        {
+            get
+            {
+                return (Easting, Northing);
+            }
+        }
+
         #endregion
 
         #region Public Methods
-        public double[] GetCoordinatePoint()
+        /// <summary>
+        /// Get the 3D Coordinate.
+        /// </summary>
+        /// <returns>Array of 3 doubles.</returns>
+        public double[] Get3DCoordinates()
         {
             return new double[] { Northing, Easting, Elevation };
         }
 
-        public (bool isSamePoint, double[] averagePoint) CompareLocation(Point otherPoint, double deltaDistance)
+        /// <summary>
+        /// Compares the location of the point to another provided point.
+        /// </summary>
+        /// <param name="otherPoint">Point to compare.</param>
+        /// <param name="deltaDistance">Distance to consider the point "same".</param>
+        /// <returns></returns>
+        public bool CompareLocation(SurveyPoint otherPoint, double deltaDistance)
         {
             if (otherPoint == null)
             {
-                return (false, null);
+                return false;
             }
             var deltaNorthing = otherPoint.Northing - Northing;
             var deltaEasting = otherPoint.Easting - Easting;
@@ -40,23 +98,52 @@ namespace ConsoleSniffer
             double totaldistance = Math.Sqrt((deltaNorthing * deltaNorthing) + (deltaEasting * deltaEasting) + (deltaElevation * deltaElevation));
             if (totaldistance <= deltaDistance)
             {
-                return (true, new double[] { (deltaNorthing + Northing) / 2, (deltaEasting + Easting) / 2, (deltaElevation + Elevation) / 2 });
+                return true;
             }
-            else
-            {
-                return (false, null);
-            }
+            return false;
         }
 
         override public string ToString()
         {
-            return $"{SourcePointID},{Northing:#.000},{Easting:#.000},{Elevation:#.000},{Description},{SourceJob},{DateAquired},{ID}";
+            return $"{ID},{Northing:#.000},{Easting:#.000},{Elevation:#.000},{Description},{SourceJob},{DateAquired},{SourcePointID}";
         } 
 
+        public string ToSimpleString()
+        {
+            return $"{SourcePointID},{Northing:#.000},{Easting:#.000},{Elevation:#.000},{Description}";
+        }
+
+        public SurveyPoint CombinePoints(IEnumerable<SurveyPoint> otherPoints)
+        {
+            var NorthingList = otherPoints.Select(op => op.Northing).ToList();
+            var EastingList = otherPoints.Select(op => op.Easting).ToList();
+            var ElevationList = otherPoints.Select(op => op.Elevation).ToList();
+
+            NorthingList.Add(Northing);
+            EastingList.Add(Easting);
+            ElevationList.Add(Elevation);
+
+            var newNorthing = NorthingList.Average();
+            var newEasting = EastingList.Average();
+            var newElevation = ElevationList.Average();
+
+            log.Warn($"New coordinates are: N: {newNorthing:#.000}({Northing - newNorthing}) | E: {newEasting:#.000}({Easting - newEasting}) | Z: {newElevation:#.000}({Elevation - newElevation})");
+            Northing = newNorthing;
+            Easting = newEasting;
+            Elevation = newElevation;
+
+            return this;
+        }
         #endregion
 
         #region Initializers
-        public Point(string inputString, string jobNumber, DateTime aquireDate)
+        /// <summary>
+        /// A survey point representation for addition into a GeoDatabase.
+        /// </summary>
+        /// <param name="inputString">Input string from field text file.</param>
+        /// <param name="jobNumber">Job number of source job.</param>
+        /// <param name="aquireDate">Date the point was aquired.</param>
+        public SurveyPoint(string inputString, string jobNumber, DateTime aquireDate)
         {
             List<string> attributes = inputString.Split(",").ToList();
             if (attributes.Count > 5)
@@ -92,6 +179,19 @@ namespace ConsoleSniffer
             SourceJob = jobNumber;
             DateAquired = aquireDate;
         } 
+
+        public SurveyPoint(string inputString)
+        {
+            string[] attributes = inputString.Split(',');
+            ID = attributes[0];
+            Northing = double.Parse(attributes[1]);
+            Easting = double.Parse(attributes[2]);
+            Elevation = double.Parse(attributes[3]);
+            Description = attributes[4];
+            DateAquired = DateTime.Parse(attributes[6]);
+            SourceJob = attributes[5];
+            SourcePointID = attributes[7];
+        }
         #endregion
     }
 }

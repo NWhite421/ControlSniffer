@@ -22,3 +22,5 @@ D:\App Development\ControlSniffer\ConsoleSniffer\obj\Release\net5.0\ConsoleSniff
 D:\App Development\ControlSniffer\ConsoleSniffer\obj\Release\net5.0\ref\ConsoleSniffer.dll
 D:\App Development\ControlSniffer\ConsoleSniffer\obj\Release\net5.0\ConsoleSniffer.pdb
 D:\App Development\ControlSniffer\ConsoleSniffer\obj\Release\net5.0\ConsoleSniffer.genruntimeconfig.cache
+D:\App Development\ControlSniffer\ConsoleSniffer\bin\Release\net5.0\CityBoundaries\PALM COAST.txt
+D:\App Development\ControlSniffer\ConsoleSniffer\bin\Release\net5.0\Readme.txt

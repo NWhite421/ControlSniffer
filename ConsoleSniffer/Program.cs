@@ -15,14 +15,12 @@ namespace ConsoleSniffer
         /// <summary>
         /// Logger
         /// </summary>
-        private static readonly ILog log = log4net.LogManager.GetLogger("Program.cs");
-
-        private static int RawPoints { get; set; }
+        private static readonly ILog log = LogManager.GetLogger("Program.cs");
 
         /// <summary>
         /// City filter
         /// </summary>
-        private static List<string> Cities = new List<string> { };
+        private static string TargetCity { get; set; }
 
         /// <summary>
         /// The point output file;
@@ -39,115 +37,149 @@ namespace ConsoleSniffer
         /// </summary>
         private static readonly List<string> KeywordBlacklist = new List<string> { ",IRC","SET" };
 
-        private static List<Point> FoundPoints = new List<Point> { };
+        private static List<SurveyPoint> FoundPoints = new List<SurveyPoint> { };
+        private static List<SurveyPoint> PointsToRemove = new List<SurveyPoint> { };
+        private static List<SurveyPoint> SavePoints = new List<SurveyPoint> { };
+
         #endregion
 
+        /// <summary>
+        /// Main entry point, handles app closure.
+        /// </summary>
+        /// <param name="args">Command line params (just don't)</param>
         static void Main(string[] args)
         {
             log.Debug("Program started");
-            Console.WriteLine("Hello World!");
 
-            EstablishJobParams();
+            //Initial project setup.
+            GetCityFromUser();
+            bool isValidExistingData = ProessExistingPoints();
+            ExitApplication(isValidExistingData, 1);
 
-            OutputFilePath = $"{String.Join(" - ", Cities.ToArray())}_point output_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.csv";
+            //Process project files.
+            bool ProjectFileProcessed = HandleRecordFiles();
+            ExitApplication(ProjectFileProcessed, 2);
 
-            string recordPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\Records";
-            foreach (string file in Directory.GetFiles(recordPath, "*.csv", SearchOption.TopDirectoryOnly))
-            {
-                GatherAndProcessProjects(file);
-            }
+            //Process points.
+            bool PointsHandled = HandlePointProcessing();
+            ExitApplication(PointsHandled, 4);
 
-            //File.WriteAllLines(OutputFilePath, FoundPoints);
+            UpdateFile();
+
             Console.WriteLine("Processing completed.\n" +
-                $"This program found {FoundPoints.Count} related points");
-
-            log.Debug("Program ended");
-            Console.Write("Program finished, press any key to exit");
-            Console.ReadKey();
+                $"This program found {SavePoints.Count} (of total {FoundPoints.Count}) related points");
+            ExitApplication(true, 0);
         }
 
 
-        #region Establish Job Parameters
-        private static void EstablishJobParams()
-        {
-            log.Debug("Establishing job start and end");
-            /*Regex regex = new Regex(@"^\d{2}-\d{2}-\d{3}$");
-            log.Debug("Grabbing starting job");
-            while (string.IsNullOrEmpty(StartingJobNumber))
+        #region Phase 1 - Establish Job Parameters
+        /// <summary>
+        /// Gets the city from the user.
+        /// </summary>
+        private static void GetCityFromUser()
+        {            
+            log.Debug("Grabbing city");
+            while (string.IsNullOrEmpty(TargetCity))
             {
-                string startEntered = GetUserStringInput("Please enter the starting job number");
-                if (regex.IsMatch(startEntered))
+                string consoleReturn = GetUserStringInput("Please enter a city.");
+                if (!string.IsNullOrEmpty(consoleReturn))
                 {
-                    StartingJobNumber = startEntered;
+                    TargetCity = consoleReturn;
                 }
                 else
                 {
-                    log.Error("Starting job number is not valid.");
-                }
-            }
-            log.Debug("Grabbing ending job");
-            regex = new Regex(@"^(?:\d{2}-\d{2}-\d{3})$|^(?:\*)$");
-            while (string.IsNullOrEmpty(EndingJobNumber))
-            {
-                string endjob = GetUserStringInput("Please enter the starting job number or * for last found job number");
-                if (regex.IsMatch(endjob))
-                {
-                    EndingJobNumber = endjob;
-                }
-                else
-                {
-                    log.Error("Ending job number is not valid.");
-                }
-            }*/
-            log.Debug("Grabbing cities");
-            {
-                bool citiesAdded = false;
-                string cities = "";
-                (int _, int top) = Console.GetCursorPosition();
-                while (!citiesAdded) 
-                {
-                    ClearConsoleAtPoint(top);
-                    Console.WriteLine($"Cites: {cities}");
-                    string city = GetUserStringInput("Please enter a city to collect");
-                    if (string.IsNullOrEmpty(city))
-                    {
-                        citiesAdded = true;
-                    }
-                    else
-                    {
-                        cities += city.ToUpper() + ", ";
-                        Cities.Add(city.ToUpper());
-                    }
+                    log.Error("You must enter a city.");
                 }
             }
         }
-        #endregion
 
-        #region Project Processing
-        private static void GatherAndProcessProjects(string path)
+        /// <summary>
+        /// Establishes existing data. If database (.csv) does not exist. Ask to create or quit.
+        /// </summary>
+        /// <returns>Database exists and points are compiled.</returns>
+        private static bool ProessExistingPoints()
         {
-            log.Info($"Processing log file \"{Path.GetFileName(path)}\"");
-            var projectRawData = File.ReadAllLines(path);
-            foreach (string projectRaw in projectRawData)
+            string baseDir = @"Z:\GIS Data\Control Points\Source\" + TargetCity.ToUpper() + ".csv";
+            if (!File.Exists(baseDir))
             {
-                Project project = new(projectRaw.Split('|'));
-                if (project.ContainsCriticalNullValues)
+                Console.Write($"\nA database for {TargetCity.ToUpper()} does not exist. Create a new database? [y/n]: ");
+                var userKey = Console.ReadKey();
+                if (userKey.Key == ConsoleKey.N)
+                {
+                    log.Error($"Base file \"{baseDir}\" does not exist");
+                    return false;
+                }
+                var newFile = File.Create(baseDir);
+                newFile.Close();
+            }
+            OutputFilePath = baseDir;
+            log.Info("PHASE 1. Processing existing points.");
+            foreach (string line in File.ReadAllLines(baseDir))
+            {
+                if (line.Equals("ID,Y,X,Z,Description,SourceJob,DateCollected,OriginalNumber"))
                 {
                     continue;
                 }
-                bool isWantedCity = Cities.Any(c => project.City.ToUpper().Equals(c));
-                if (project != null)
+                FoundPoints.Add(new(line));
+            }
+            return true;
+        }
+        #endregion
+
+        #region Phase 2 - Project Files Processing
+
+        private static bool HandleRecordFiles()
+        {
+            string recordPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\Records";
+            if (!Directory.Exists(recordPath) || Directory.GetFiles(recordPath).Count() < 1)
+            {
+                log.Error($"No record information was found in {recordPath}");
+                return false;
+            }
+            bool recordFailedToProcess = false;
+            foreach (string file in Directory.GetFiles(recordPath, "*.csv", SearchOption.TopDirectoryOnly))
+            {
+                if (!recordFailedToProcess && GatherAndProcessProjects(file) == recordFailedToProcess)
                 {
-                    if (isWantedCity)
+                    recordFailedToProcess = true;
+                }
+            }
+            return recordFailedToProcess ? false : true;
+        }
+
+        private static bool GatherAndProcessProjects(string path)
+        {
+            try
+            {
+                log.Info($"Processing log file \"{Path.GetFileName(path)}\"");
+                var projectRawData = File.ReadAllLines(path);
+                foreach (string projectRaw in projectRawData)
+                {
+                    Project project = new(projectRaw.Split('|'));
+                    if (project.ContainsCriticalNullValues)
                     {
-                        log.Debug($"Project matches criteria: {project.JobNumber}");
-                        ProcessProject(project);
+                        continue;
                     }
-                    else
+                    if (project != null)
                     {
-                        log.Debug($"Project discarded for non-wanted city");
+                        bool isWantedCity = project.City.ToUpper() == TargetCity.ToUpper();
+                        if (isWantedCity)
+                        {
+                            log.Debug($"Project matches criteria: {project.JobNumber}");
+                            ProcessProject(project);
+                        }
+                        else
+                        {
+                            log.Debug($"Project discarded for non-wanted city");
+                        }
                     }
                 }
+                return true;
+            }
+            catch (Exception e)
+            {
+                log.Error($"Processing of record {path} failed", e);
+                return false;
             }
         }
 
@@ -188,7 +220,8 @@ namespace ConsoleSniffer
                 bool containsBlacklist = KeywordBlacklist.Any(s => line.Contains(s));
                 if (containsWhitelist && !containsBlacklist)
                 {
-                    Point point = new(line, project.JobNumber, File.GetCreationTime(path));
+                    SurveyPoint point = new(line, project.JobNumber, File.GetCreationTime(path));
+                    point.ID = $"{DateTime.Now:yy}-{FoundPoints.Count + 1:00000}";
                     bool alreadyFound = FoundPoints.Any(p => point.Equals(p));
                     if (alreadyFound)
                     {
@@ -208,12 +241,72 @@ namespace ConsoleSniffer
         }
         #endregion
 
-        private static void ProcessPointList()
-        {
+        #region Phase 3 - Point Checks and Storing
 
+        private static bool HandlePointProcessing()
+        {
+            if (FoundPoints.Count < 1)
+            {
+                log.Error("No points are found.");
+                ExitApplication(false, 3);
+            }
+            foreach (SurveyPoint point in FoundPoints)
+            {
+                if (PointsToRemove.Contains(point) || SavePoints.Contains(point))
+                {
+                    log.Info("Point has already been marked for removal.");
+                    continue;
+                }
+                Console.WriteLine(point.ToString() + "\n===================================================================================");
+                var ClosePointCount = FoundPoints.Where(op => op.ID != point.ID && point.CompareLocation(op, 2));
+                if (ClosePointCount.Count() > 0)
+                {
+                    var VaryingPointCount = FoundPoints.Where(op => op.ID != point.ID && point.CompareLocation(op, .15));
+                    log.Info($"Point has {ClosePointCount.Count()} nearby points (<= 2) and {VaryingPointCount.Count()} varying points (<= 0.15).");
+                    log.Warn("Close Points:");
+                    foreach (SurveyPoint pointOther in ClosePointCount)
+                    {
+                        log.Info($"\t{pointOther}");
+                    }
+                    log.Warn("Really Close Points:");
+                    foreach (SurveyPoint pointOther in VaryingPointCount)
+                    {
+                        log.Info($"\t{pointOther}");
+                    }
+                    CombinePoints(point, VaryingPointCount.ToList());
+                }
+            }
+            return true;
         }
 
-        #region User Input
+        private static bool CombinePoints(SurveyPoint basePoint, List<SurveyPoint> otherPoints)
+        {
+            SurveyPoint point = basePoint.CombinePoints(otherPoints);
+            SavePoints.Add(point);
+            foreach (SurveyPoint surveyPoint in otherPoints)
+            {
+                PointsToRemove.Add(surveyPoint);
+            }
+            log.Info($"Removed {otherPoints.Count} points and kept {point.ID}");
+            return true;
+        }
+
+        private static void UpdateFile()
+        {
+            var stream = File.Create(OutputFilePath);
+            stream.Close();
+            File.WriteAllText(OutputFilePath, "ID,Y,X,Z,Description,SourceJob,DateCollected,OriginalNumber\n");
+            for (int i = 0; i < SavePoints.Count; i++)
+            {
+                SurveyPoint point = SavePoints[i];
+                point.ID = $"{DateTime.Now:yy}-{i + 1:00000}";
+                log.Info($"Writing {point} to database");
+                File.AppendAllText(OutputFilePath, point.ToString() + Environment.NewLine);
+            }
+        }
+        #endregion
+
+        #region Misc - User Input
         /// <summary>
         /// Get string from user.
         /// </summary>
@@ -244,6 +337,31 @@ namespace ConsoleSniffer
                 Console.WriteLine(blank);
             }
             Console.SetCursorPosition(0, top);
+        }
+
+        /// <summary>
+        /// Alerts the user the application cannot continue and closes application.
+        /// </summary>
+        /// <param name="success">Bool if method succeded</param>
+        /// <param name="errorCode">Error code ID</param>
+        private static void ExitApplication(bool success, int errorCode)
+        {
+            if (!success)
+            {
+                //If no database exists, we are not going to process data.
+                log.Error("Could not continue due to fatal error. Press any key to exit.");
+                Console.ReadKey();
+                log.Debug($"Program closed with exit code {errorCode}");
+                Environment.Exit(errorCode);
+            }
+            else if (errorCode == 0)
+            {
+                Console.WriteLine("Program successfully completed.");
+                log.Debug("Program ended with exit code 0");
+                Console.Write("Press any key to exit");
+                Console.ReadKey();
+                Environment.Exit(0);
+            }
         }
         #endregion
     }
