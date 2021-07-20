@@ -37,6 +37,10 @@ namespace ConsoleSniffer
         /// </summary>
         private static readonly List<string> KeywordBlacklist = new List<string> { ",IRC","SET" };
 
+        private static readonly List<string> ProcessedProjects = File.ReadAllLines("RecordProjects.txt").ToList();
+        private static int ImportedPoints { get; set; }
+        private static int NewPoints = 0;
+
         private static List<SurveyPoint> FoundPoints = new List<SurveyPoint> { };
         private static List<SurveyPoint> PointsToRemove = new List<SurveyPoint> { };
         private static List<SurveyPoint> SavePoints = new List<SurveyPoint> { };
@@ -53,22 +57,26 @@ namespace ConsoleSniffer
 
             //Initial project setup.
             GetCityFromUser();
-            bool isValidExistingData = ProessExistingPoints();
-            ExitApplication(isValidExistingData, 1);
+            if (!ProessExistingPoints())
+            {
+                ExitApplication(1);
+            }
 
             //Process project files.
-            bool ProjectFileProcessed = HandleRecordFiles();
-            ExitApplication(ProjectFileProcessed, 2);
+            if (!HandleRecordFiles())
+            {
+                ExitApplication(1);
+            }
 
             //Process points.
-            bool PointsHandled = HandlePointProcessing();
-            ExitApplication(PointsHandled, 4);
+            if (!HandlePointProcessing())
+            {
+                ExitApplication(1);
+            }
 
             UpdateFile();
 
-            Console.WriteLine("Processing completed.\n" +
-                $"This program found {SavePoints.Count} (of total {FoundPoints.Count}) related points");
-            ExitApplication(true, 0);
+            ExitApplication(0);
         }
 
 
@@ -111,17 +119,27 @@ namespace ConsoleSniffer
                 }
                 var newFile = File.Create(baseDir);
                 newFile.Close();
+                log.Debug("\nfile created.");
             }
             OutputFilePath = baseDir;
             log.Info("PHASE 1. Processing existing points.");
+            log.Debug("Processing points from existing file.");
             foreach (string line in File.ReadAllLines(baseDir))
             {
+                log.Debug($"Reading line \"{line}\"");
                 if (line.Equals("ID,Y,X,Z,Description,SourceJob,DateCollected,OriginalNumber"))
                 {
+                    log.Debug("I hate this line.");
+                    continue;  
+                }
+                if (string.IsNullOrEmpty(line))
+                {
+                    log.Debug("Nothing is here...");
                     continue;
                 }
                 FoundPoints.Add(new(line));
             }
+            ImportedPoints = FoundPoints.Count;
             return true;
         }
         #endregion
@@ -186,10 +204,16 @@ namespace ConsoleSniffer
         private static void ProcessProject(Project project)
         {
             log.Info($"Processing Project {project.JobNumber} in {project.City}");
+            if (ProcessedProjects.Any(pn => project.JobNumber == pn))
+            {
+                log.Info("Skipping... project has been processed before.");
+                return;
+            }
             foreach (string file in GetAllTextFiles(project.Path))
             {
                 HandleFile(file, project);
             }
+            File.AppendAllText("RecordProjects.txt", $"{project.JobNumber}{Environment.NewLine}");
         }
 
         private static List<string> GetAllTextFiles(string projectPath)
@@ -231,6 +255,7 @@ namespace ConsoleSniffer
                     {
                         log.Info($"Found point: {point}");
                         FoundPoints.Add(point);
+                        NewPoints++;
                     }
                 }
                 else
@@ -248,7 +273,7 @@ namespace ConsoleSniffer
             if (FoundPoints.Count < 1)
             {
                 log.Error("No points are found.");
-                ExitApplication(false, 3);
+                ExitApplication(3);
             }
             foreach (SurveyPoint point in FoundPoints)
             {
@@ -257,18 +282,18 @@ namespace ConsoleSniffer
                     log.Info("Point has already been marked for removal.");
                     continue;
                 }
-                Console.WriteLine(point.ToString() + "\n===================================================================================");
+                //Console.WriteLine(point.ToString() + "\n===================================================================================");
                 var ClosePointCount = FoundPoints.Where(op => op.ID != point.ID && point.CompareLocation(op, 2));
                 if (ClosePointCount.Count() > 0)
                 {
                     var VaryingPointCount = FoundPoints.Where(op => op.ID != point.ID && point.CompareLocation(op, .15));
                     log.Info($"Point has {ClosePointCount.Count()} nearby points (<= 2) and {VaryingPointCount.Count()} varying points (<= 0.15).");
-                    log.Warn("Close Points:");
+                    log.Info("Close Points:");
                     foreach (SurveyPoint pointOther in ClosePointCount)
                     {
                         log.Info($"\t{pointOther}");
                     }
-                    log.Warn("Really Close Points:");
+                    log.Info("Really Close Points:");
                     foreach (SurveyPoint pointOther in VaryingPointCount)
                     {
                         log.Info($"\t{pointOther}");
@@ -344,23 +369,38 @@ namespace ConsoleSniffer
         /// </summary>
         /// <param name="success">Bool if method succeded</param>
         /// <param name="errorCode">Error code ID</param>
-        private static void ExitApplication(bool success, int errorCode)
+        private static void ExitApplication(int errorCode)
         {
-            if (!success)
+            if (errorCode > 0)
             {
                 //If no database exists, we are not going to process data.
-                log.Error("Could not continue due to fatal error. Press any key to exit.");
+                log.Error($"Could not continue due to fatal error (exit code {errorCode}). Press any key to exit.");
                 Console.ReadKey();
                 log.Debug($"Program closed with exit code {errorCode}");
                 Environment.Exit(errorCode);
             }
             else if (errorCode == 0)
             {
-                Console.WriteLine("Program successfully completed.");
-                log.Debug("Program ended with exit code 0");
-                Console.Write("Press any key to exit");
+                int colWidth = Console.WindowWidth;
+                string seperator = new('=', colWidth);
+
+                Console.Write($"\n{seperator}\n" +
+                    $"The program has sucessfully parsed and processed project points. The data of the process is below.\n" +
+                    $"Imported points: {ImportedPoints}\n" +
+                    $"Imported projects: {ProcessedProjects.Count}\n" +
+                    $"New points: {NewPoints}\n" +
+                    $"Total unprocessed points: {ImportedPoints + NewPoints} ({FoundPoints.Count})\n" +
+                    $"Filtered out points: {PointsToRemove.Count}\n" +
+                    $"Total points saved: {SavePoints.Count}\n" +
+                    $"Points saved to: {OutputFilePath}\n" +
+                    $"{seperator}\n" +
+                    $"Press any ket to exit...");
                 Console.ReadKey();
                 Environment.Exit(0);
+            }
+            else
+            {
+                log.Error("How the fuck did you not exit the app correctly?");
             }
         }
         #endregion

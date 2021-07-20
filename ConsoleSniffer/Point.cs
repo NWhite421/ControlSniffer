@@ -154,21 +154,20 @@ namespace ConsoleSniffer
                     Console.Write("A point value has too many commas.\n" +
                         $"Value 5: {attributes[4]} | Value 6: {attributes[5]}\n" +
                         "Combine value 5 & 6 [y/n]: ");
-                    var ret = Console.ReadKey();
+                    var ret = Console.ReadKey(true);
                     if (ret.Key != ConsoleKey.Y)
                     {
                         Console.ForegroundColor = ConsoleColor.White;
                         return;
                     }
                 }
-                
-                attributes[4] = $"{attributes[4]} {attributes[5]}";
+                attributes[4] = $"{attributes[4]}--{attributes[5]}";
                 attributes.RemoveAt(5);
                 Console.ForegroundColor = ConsoleColor.White;
             }
             if (attributes.Count < 5)
             {
-                log.Warn("Point could not be created due to too little arguments passed.");
+                log.Warn($"Point could not be created due to too little arguments passed.\n--> {inputString}");
                 return;
             }
             SourcePointID = attributes[0];
@@ -182,6 +181,11 @@ namespace ConsoleSniffer
 
         public SurveyPoint(string inputString)
         {
+            if (string.IsNullOrEmpty(inputString))
+            {
+                log.Warn($"Could not process existing line item.\n\"{inputString}\"");
+                return;
+            }
             string[] attributes = inputString.Split(',');
             ID = attributes[0];
             Northing = double.Parse(attributes[1]);
